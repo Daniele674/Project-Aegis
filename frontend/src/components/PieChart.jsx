@@ -2,43 +2,36 @@ import { ResponsivePie } from "@nivo/pie";
 import { tokens } from "../theme";
 import { useTheme } from "@mui/material";
 import axios from 'axios';
-import React, {useEffect, useState, useContext } from 'react';
-import {OrgContext} from './OrgContext';
+import React, { useEffect, useState, useContext } from 'react';
+import { OrgContext } from './OrgContext';
 
 const PieChart = () => {
   const [data, setData] = useState([]);
   const theme = useTheme();
   const colors = tokens(theme.palette.mode);
-  const {org,setOrg} = useContext(OrgContext);
-  
+  const { org } = useContext(OrgContext);
+
   useEffect(() => {
-  axios.post('http://localhost:3001/query/CountBySeverity',{},{
-  	headers:{
-  		'x-org':org
-  	}
-  }).then(response => {
-  		const value = response.data;
-  		const file = [
-		  {	id:"low",
-		  	label:"Low",
-		  	value:value.Low,
-		  	//color: "hsl(104, 70%, 50%)"
-		  	
-		  },
-		  {	id:"medium",
-		  	label:"Medium",
-		  	value:value.Medium,
-		  	//color: "hsl(162, 70%, 50%)"
-		  },
-		  {	id:"high",
-		  	label:"High",
-		  	value:value.High,
-		  	//color: "hsl(291, 70%, 50%)"
-		  }
-		  ];
-		  setData(file);
-  	});
-  }, []);
+    axios.post('http://localhost:3001/query/CountBySeverity', {}, {
+      headers: {
+        'x-org': org
+      }
+    }).then(response => {
+      const value = response.data;
+      console.log("Dati CountBySeverity:", value); // Debug
+
+      const formattedData = [
+        { id: "low", label: "Low", value: value.low || 0 },
+        { id: "medium", label: "Medium", value: value.medium || 0 },
+        { id: "high", label: "High", value: value.high || 0 },
+        { id: "critical", label: "Critical", value: value.critical || 0 }
+      ];
+
+      setData(formattedData);
+    }).catch(err => {
+      console.error("Errore nel recupero dati CountBySeverity:", err);
+    });
+  }, [org]);
 
   return (
     <ResponsivePie
@@ -46,30 +39,25 @@ const PieChart = () => {
       theme={{
         axis: {
           domain: {
-            line: {
-              stroke: colors.grey[100],
-            },
+            line: { stroke: colors.grey[100] },
           },
           legend: {
-            text: {
-              fill: colors.grey[100],
-            },
+            text: { fill: colors.grey[100] },
           },
           ticks: {
             line: {
               stroke: colors.grey[100],
               strokeWidth: 1,
             },
-            text: {
-              fill: colors.grey[100],
-            },
+            text: { fill: colors.grey[100] },
           },
         },
         legends: {
-          text: {
-            fill: colors.grey[100],
-          },
+          text: { fill: colors.grey[100] },
         },
+        tooltip: {
+          container: { background: colors.primary[500] },
+        }
       }}
       margin={{ top: 40, right: 80, bottom: 80, left: 80 }}
       innerRadius={0.5}
@@ -91,31 +79,10 @@ const PieChart = () => {
         from: "color",
         modifiers: [["darker", 2]],
       }}
-      defs={[
-        {
-          id: "dots",
-          type: "patternDots",
-          background: "inherit",
-          color: "rgba(255, 255, 255, 0.3)",
-          size: 4,
-          padding: 1,
-          stagger: true,
-        },
-        {
-          id: "lines",
-          type: "patternLines",
-          background: "inherit",
-          color: "rgba(255, 255, 255, 0.3)",
-          rotation: -45,
-          lineWidth: 6,
-          spacing: 10,
-        },
-      ]}
       legends={[
         {
           anchor: "bottom",
           direction: "row",
-          justify: false,
           translateX: 0,
           translateY: 56,
           itemsSpacing: 0,
