@@ -98,7 +98,7 @@ const Form2 = () => {
                 onChange={handleChange}
                 value={values.id}
                 name="id"
-                disabled="true"
+                disabled={true}
                 error={!!touched.id && !!errors.id}
                 helperText={touched.id && errors.id}
                 sx={{ gridColumn: "span 2" }}
@@ -178,7 +178,7 @@ const Form2 = () => {
 const checkoutSchema = yup.object().shape({
   sourceIP: yup.string().required("required"),
   attackType: yup.string().required("required"),
-  severity: yup.string().oneOf(['Low','Medium','High']).required("Acceptable Values are Low, Medium or High"),
+  severity: yup.string().oneOf(['low', 'medium', 'high', 'critical']).required("Acceptable Values are low, medium, high or critical"),
   description: yup.string().nullable().notRequired(),
 });
 

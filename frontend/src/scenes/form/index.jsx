@@ -54,7 +54,7 @@ const Form = () => {
    };
    reader.readAsText(file);
   } catch (error) {
-   console.error("Errore durante l'upload:", error);
+   console.error("Errore during l'upload:", error);
  }
 };
 
@@ -182,7 +182,7 @@ const Form = () => {
 const checkoutSchema = yup.object().shape({
   sourceIP: yup.string().required("required"),
   attackType: yup.string().required("required"),
-  severity: yup.string().oneOf(['Low','Medium','High']).required("Acceptable Values are Low, Medium or High"),
+  severity: yup.string().oneOf(['low','medium','high', 'critical']).required("Acceptable Values are low, medium, high or critical"),
   description: yup.string().nullable().notRequired(),
 });
 
