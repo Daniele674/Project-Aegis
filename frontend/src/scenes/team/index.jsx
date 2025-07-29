@@ -1,4 +1,4 @@
-import { Box, useTheme, Snackbar, IconButton, Typography, Tooltip } from "@mui/material";
+import { Box, useTheme, Button, Snackbar, IconButton, Typography, Tooltip } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { tokens } from "../../theme";
 import Header from "../../components/Header";
@@ -63,15 +63,18 @@ const Team = () => {
 
   const deleteLog = async (id) => {
     if (window.confirm("Are you sure you want to delete this log?")) {
+        const originalRows = [...rows];
+        const newRows = rows.filter(row => row.id !== id);
+        setRows(newRows);
         try {
             await axios.post('http://localhost:3001/invoke/DeleteLog', { id }, { headers: { 'x-org': org } });
             setAlertData({ severity: 'success', title: 'Success', message: 'The log has been deleted!' });
             setOpen(true);
-            getAllLogs();
         } catch (error) {
             console.error('Error deleting log:', error);
-            setAlertData({ severity: 'error', title: 'Error', message: 'An error has occurred!' });
+            setAlertData({ severity: 'error', title: 'Error', message: 'Failed to delete. Restoring log.' });
             setOpen(true);
+            setRows(originalRows);
         }
     }
   };
@@ -85,15 +88,7 @@ const Team = () => {
       headerName: "Timestamp",
       flex: 1,
       cellClassName: "name-column--cell",
-      // Formattazione per corrispondere allo screenshot: GG/MM/AAAA, HH:MM:SS
-      valueFormatter: (value) => {
-        if (!value) return '';
-        const date = new Date(value);
-        return date.toLocaleString('it-IT', {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit', second: '2-digit'
-        });
-      }
+      valueFormatter: (value) => value ? new Date(value).toLocaleString('it-IT') : ''
     },
     { field: "source_ip", headerName: "Source IP", flex: 0.8 },
     { field: "attack_type", headerName: "Attack Type", flex: 1 },
@@ -102,26 +97,28 @@ const Team = () => {
       headerName: "Severity",
       flex: 0.8,
       headerAlign: 'center',
-      // Applica la classe di allineamento personalizzata
-      cellClassName: 'center-aligned-cell',
+      align: 'center',
       renderCell: ({ row: { severity } }) => {
         const severityLower = (severity || '').toLowerCase();
         return (
-          <Box
-            width="90px" // Larghezza fissa per coerenza
-            p="5px"
-            textAlign="center"
-            backgroundColor={
-              severityLower === 'critical' ? colors.redAccent[600] :
-              severityLower === 'high' ? colors.redAccent[500] :
-              severityLower === 'medium' ? colors.blueAccent[600] :
-              colors.greenAccent[700]
-            }
-            borderRadius="4px"
-          >
-            <Typography color={colors.grey[100]} sx={{ textTransform: 'capitalize' }}>
-              {severity}
-            </Typography>
+          // Contenitore Flexbox per garantire il centraggio
+          <Box width="100%" height="100%" display="flex" alignItems="center" justifyContent="center">
+            <Box
+              width="90px"
+              p="5px"
+              textAlign="center"
+              backgroundColor={
+                severityLower === 'critical' ? colors.redAccent[600] :
+                severityLower === 'high' ? colors.redAccent[500] :
+                severityLower === 'medium' ? colors.blueAccent[600] :
+                colors.greenAccent[700]
+              }
+              borderRadius="4px"
+            >
+              <Typography color={colors.grey[100]} sx={{ textTransform: 'capitalize' }}>
+                {severity}
+              </Typography>
+            </Box>
           </Box>
         );
       },
@@ -135,25 +132,22 @@ const Team = () => {
       filterable: false,
       disableColumnMenu: true,
       headerAlign: 'center',
-      // Applica la classe di allineamento personalizzata
-      cellClassName: 'center-aligned-cell',
-      renderCell: ({ row }) => {
-        return (
-          // Ora non serve un Box esterno per centrare, lo fa la cella
-          <>
-            <Tooltip title="Update Log">
-              <IconButton onClick={() => history("/update", { state: { log: row } })}>
-                <EditOutlinedIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete Log">
-              <IconButton onClick={() => deleteLog(row.id)} sx={{ color: colors.redAccent[500] }}>
-                <DeleteOutlineOutlinedIcon />
-              </IconButton>
-            </Tooltip>
-          </>
-        );
-      },
+      align: 'center',
+      renderCell: ({ row }) => (
+        // Contenitore Flexbox per garantire il centraggio
+        <Box width="100%" height="100%" display="flex" alignItems="center" justifyContent="center">
+          <Tooltip title="Update Log">
+            <IconButton onClick={() => history("/update", { state: { log: row } })}>
+              <EditOutlinedIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete Log">
+            <IconButton onClick={() => deleteLog(row.id)} sx={{ color: colors.redAccent[500] }}>
+              <DeleteOutlineOutlinedIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ),
     },
   ];
 
@@ -177,13 +171,7 @@ const Team = () => {
               backgroundColor: colors.blueAccent[700],
             },
             "& .MuiDataGrid-toolbarContainer .MuiButton-text": { color: `${colors.grey[100]} !important` },
-            "& .MuiIconButton-root:hover": { color: colors.greenAccent[300] },
-            // --- CLASSE PERSONALIZZATA PER IL CENTRAGGIO PERFETTO ---
-            "& .center-aligned-cell": {
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-            }
+            "& .MuiIconButton-root:hover": { color: colors.greenAccent[300] }
         }}
       >
         <DataGrid
