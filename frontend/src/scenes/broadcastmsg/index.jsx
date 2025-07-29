@@ -1,55 +1,52 @@
 import { Box, Button, TextField, Snackbar, useTheme } from "@mui/material";
-import { Formik, Field } from "formik";
+import { Formik } from "formik";
 import * as yup from "yup";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import Header from "../../components/Header";
 import axios from "axios";
-import React, {useRef, useState, useContext, useEffect} from 'react';
+import React, { useState, useContext } from 'react';
 import AlertTitle from '@mui/material/AlertTitle';
 import Alert from '@mui/material/Alert';
-import {OrgContext} from "../../components/OrgContext";
+import { OrgContext } from "../../components/OrgContext";
 import { tokens } from "../../theme";
 
 const Form4 = () => {
   const isNonMobile = useMediaQuery("(min-width:600px)");
   const theme = useTheme();
   const colors = tokens(theme.palette.mode);
-  const {org, setOrg} = useContext(OrgContext);
-  const fileInputRef = useRef(null);
-  const [open, setOpen]= useState(false);
+  const { org } = useContext(OrgContext);
+  const [open, setOpen] = useState(false);
   const [alertData, setAlertData] = useState({
-   severity: 'success', title:'Success', message:'The message has been sent!'
+    severity: 'success', title: 'Success', message: 'The message has been sent!'
   });
-   
-  const sendBroadcastMsg = async(log) => {
-	try{
-	console.log("sending log data:",log);
-	const response = await axios.post('http://localhost:3001/node/BroadcastMessage',log, {
-		headers:{
-			'x-org':org
-		}
-	});
-	console.log('message sent:',response.data);
-	//alert('Log uploaded and published with CID:');
-	setOpen(true);
-	} catch (error){
-	console.error('error in sending the msg',error);
-	//alert('error uploading and publishing log');
-	setAlertData({
-	 severity:'error', title:'Error', message:'An error has occured!'
-	});
-	setOpen(true);
-	}
-};
-  
-  const handleFormSubmit = (values, {resetForm}) => {
-    console.log(values);
+
+  const sendBroadcastMsg = async (values) => {
+    try {
+      console.log("Sending broadcast message:", values);
+      const response = await axios.post('http://localhost:3001/node/BroadcastMessage', values, {
+        headers: { 'x-org': org }
+      });
+      console.log('Message sent:', response.data);
+      setAlertData({
+        severity: 'success', title: 'Success', message: 'The message has been sent!'
+      });
+      setOpen(true);
+    } catch (error) {
+      console.error('Error sending the message:', error);
+      setAlertData({
+        severity: 'error', title: 'Error', message: error.response?.data?.error || 'An error has occurred!'
+      });
+      setOpen(true);
+    }
+  };
+
+  const handleFormSubmit = (values, { resetForm }) => {
     sendBroadcastMsg(values);
     resetForm();
   };
 
-  const handleClose= () =>{
-  setOpen(false);
+  const handleClose = () => {
+    setOpen(false);
   };
 
   return (
@@ -68,7 +65,6 @@ const Form4 = () => {
           handleBlur,
           handleChange,
           handleSubmit,
-          setFieldValue
         }) => (
           <form onSubmit={handleSubmit}>
             <Box
@@ -79,7 +75,6 @@ const Form4 = () => {
                 "& > div": { gridColumn: isNonMobile ? undefined : "span 4" },
               }}
             >
-             
               <TextField
                 fullWidth
                 variant="filled"
@@ -93,7 +88,7 @@ const Form4 = () => {
                 helperText={touched.message && errors.message}
                 sx={{ gridColumn: "span 4" }}
               />
-               <TextField
+              <TextField
                 fullWidth
                 variant="filled"
                 type="text"
@@ -106,7 +101,7 @@ const Form4 = () => {
                 helperText={touched.tag && errors.tag}
                 sx={{ gridColumn: "span 2" }}
               />
-               <TextField
+              <TextField
                 fullWidth
                 variant="filled"
                 type="text"
@@ -128,11 +123,11 @@ const Form4 = () => {
           </form>
         )}
       </Formik>
-       <Snackbar open={open} autoHideDuration="2000" onClose={handleClose} anchorOrigin={{vertical:'top', horizontal:'center'}}>
-       <Alert onClose={handleClose} severity={alertData.severity} sx={{width: '100%'}}>
-        <AlertTitle>{alertData.title}</AlertTitle>
-        {alertData.message}
-       </Alert>
+      <Snackbar open={open} autoHideDuration={3000} onClose={handleClose} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+        <Alert onClose={handleClose} severity={alertData.severity} sx={{ width: '100%' }}>
+          <AlertTitle>{alertData.title}</AlertTitle>
+          {alertData.message}
+        </Alert>
       </Snackbar>
     </Box>
   );
@@ -140,14 +135,20 @@ const Form4 = () => {
 
 const checkoutSchema = yup.object().shape({
   message: yup.string().required("required"),
-  tag: yup.string().nullable().notRequired(),
+  // Il tag è ora obbligatorio e ha una regola di validazione per i caratteri
+  tag: yup
+    .string()
+    .matches(/^[a-zA-Z0-9_.-]+$/, "Tag can only contain letters, numbers, dot, dash, and underscore")
+    .min(1, "Tag cannot be empty")
+    .max(64, "Tag cannot be longer than 64 characters")
+    .required("required"),
   topics: yup.string().required("required"),
 });
 
 const initialValues = {
-  tag:"",
-  topics:"",
-  message:""
+  tag: "",
+  topics: "",
+  message: ""
 };
 
 export default Form4;
