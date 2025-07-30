@@ -15,7 +15,9 @@ import {
     TableHead,
     TableRow,
     Paper,
-    Tooltip
+    Tooltip,
+    ToggleButton,
+    ToggleButtonGroup
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { tokens } from "../../theme";
@@ -37,12 +39,38 @@ const Logs = () => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedLogId, setSelectedLogId] = useState(null);
 
-  useEffect(() => {
+  // Stato per il filtro attivo, l'oggetto intero viene usato come valore
+  const [activeFilter, setActiveFilter] = useState({ type: 'all', value: 'all' });
+
+  // Funzione centralizzata per caricare i log in base al filtro
+  const fetchLogs = async (filter) => {
+    if (!org) return;
     setLoading(true);
-    axios.post('http://localhost:3001/query/GetAllLogs', {}, {
-      headers: { 'x-org': org }
-    }).then(response => {
-      const data = response.data.map(log => ({
+
+    let endpoint = '/query/GetAllLogs';
+    let payload = {};
+
+    switch(filter.type) {
+      case 'severity':
+        endpoint = '/query/GetLogsBySeverity';
+        payload = { severity: filter.value };
+        break;
+      case 'attachments':
+        endpoint = '/query/GetLogsWithAttachments';
+        break;
+      case 'submitter':
+        endpoint = '/query/GetLogsBySubmitter';
+        payload = { mspID: filter.value };
+        break;
+      default: // 'all'
+        endpoint = '/query/GetAllLogs';
+    }
+
+    try {
+      const response = await axios.post(`http://localhost:3001${endpoint}`, payload, {
+        headers: { 'x-org': org }
+      });
+      const data = (response.data || []).map(log => ({
         id: log.id,
         submitter: log.submitter,
         timestamp: log.timestamp,
@@ -53,13 +81,27 @@ const Logs = () => {
         attachmentHash: log.attachmentHash
       }));
       setRows(data);
-    }).catch(error => {
-      console.error("Errore nel caricamento dei log:", error);
+    } catch (error) {
+      console.error(`Errore nel caricamento dei log per il filtro ${filter.type}:`, error);
       setRows([]);
-    }).finally(() => {
+    } finally {
       setLoading(false);
-    });
-  }, [org]);
+    }
+  };
+
+  // useEffect viene eseguito quando 'org' o 'activeFilter' cambiano
+  useEffect(() => {
+    fetchLogs(activeFilter);
+  }, [org, activeFilter]);
+  
+  // Funzione unica per gestire il cambio di tutti i filtri
+  const handleFilterChange = (event, newFilter) => {
+    // ToggleButtonGroup con 'exclusive' può restituire null se si deseleziona un pulsante.
+    // Preveniamo questo comportamento per assicurarci che un filtro sia sempre attivo.
+    if (newFilter !== null) {
+      setActiveFilter(newFilter);
+    }
+  };
 
   const handleDownload = async (attachmentId, logId) => {
     try {
@@ -95,7 +137,6 @@ const Logs = () => {
       setHistoryData(response.data || []);
       setIsHistoryOpen(true);
     } catch (error) {
-      console.error("Errore nel recupero della cronologia:", error);
       alert("Impossibile recuperare la cronologia del log.");
     }
   };
@@ -118,17 +159,16 @@ const Logs = () => {
       flex: 0.8,
       headerAlign: 'center',
       renderCell: ({ row: { severity } }) => (
-        // Contenitore Flexbox per garantire il centraggio perfetto
         <Box width="100%" height="100%" display="flex" alignItems="center" justifyContent="center">
-            <Box width="90px" p="5px" textAlign="center" borderRadius="4px"
-                backgroundColor={
-                    (severity || '').toLowerCase() === 'critical' ? colors.redAccent[600] :
-                    (severity || '').toLowerCase() === 'high' ? colors.redAccent[500] :
-                    (severity || '').toLowerCase() === 'medium' ? colors.blueAccent[600] :
-                    colors.greenAccent[700]
-                }>
-                <Typography color={colors.grey[100]} sx={{ textTransform: 'capitalize' }}>{severity}</Typography>
-            </Box>
+          <Box width="90px" p="5px" textAlign="center" borderRadius="4px"
+              backgroundColor={
+                  (severity || '').toLowerCase() === 'critical' ? colors.redAccent[600] :
+                  (severity || '').toLowerCase() === 'high' ? colors.redAccent[500] :
+                  (severity || '').toLowerCase() === 'medium' ? colors.blueAccent[600] :
+                  colors.greenAccent[700]
+              }>
+              <Typography color={colors.grey[100]} sx={{ textTransform: 'capitalize' }}>{severity}</Typography>
+          </Box>
         </Box>
       )
     },
@@ -140,7 +180,6 @@ const Logs = () => {
       sortable: false, filterable: false, disableColumnMenu: true,
       headerAlign: 'center',
       renderCell: (params) => (
-        // Contenitore Flexbox per garantire il centraggio perfetto
         <Box width="100%" height="100%" display="flex" alignItems="center" justifyContent="center">
             {params.row.attachmentHash && (
                 <Tooltip title="Download Attachment">
@@ -162,7 +201,28 @@ const Logs = () => {
   return (
     <Box m="20px">
       <Header title="ALL LOGS" subtitle="List of All Logs on the Network" />
-      <Box m="40px 0 0 0" height="75vh" sx={{
+
+      {/* --- BARRA DEI FILTRI MIGLIORATA --- */}
+      <Box mb={2} display="flex" flexDirection="column" gap={2}>
+        <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+            <Typography color={colors.grey[300]}>Quick Filters:</Typography>
+            <ToggleButtonGroup value={activeFilter} exclusive onChange={handleFilterChange} aria-label="log filters">
+                <ToggleButton value={{ type: 'all', value: 'all' }} sx={{ color: colors.grey[100] }}>All</ToggleButton>
+                <ToggleButton value={{ type: 'attachments' }} sx={{ color: colors.grey[100] }}>With Attachments</ToggleButton>
+            </ToggleButtonGroup>
+        </Box>
+        <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+            <Typography color={colors.grey[300]}>Severity:</Typography>
+            <ToggleButtonGroup value={activeFilter} exclusive onChange={handleFilterChange} aria-label="severity filters">
+                <ToggleButton value={{ type: 'severity', value: 'critical' }} sx={{ color: colors.grey[100] }}>Critical</ToggleButton>
+                <ToggleButton value={{ type: 'severity', value: 'high' }} sx={{ color: colors.grey[100] }}>High</ToggleButton>
+                <ToggleButton value={{ type: 'severity', value: 'medium' }} sx={{ color: colors.grey[100] }}>Medium</ToggleButton>
+                <ToggleButton value={{ type: 'severity', value: 'low' }} sx={{ color: colors.grey[100] }}>Low</ToggleButton>
+            </ToggleButtonGroup>
+        </Box>
+      </Box>
+
+      <Box height="65vh" sx={{
           "& .MuiDataGrid-root": { border: "none" },
           "& .MuiDataGrid-cell": { borderBottom: "none", py: 1 },
           "& .name-column--cell": { color: colors.greenAccent[300] },
@@ -170,7 +230,15 @@ const Logs = () => {
           "& .MuiDataGrid-virtualScroller": { backgroundColor: colors.primary[400] },
           "& .MuiDataGrid-footerContainer": { borderTop: "none", backgroundColor: colors.blueAccent[700] },
           "& .MuiDataGrid-toolbarContainer .MuiButton-text": { color: `${colors.grey[100]} !important` },
-          "& .MuiIconButton-root:hover": { color: colors.greenAccent[300] }
+          "& .MuiIconButton-root:hover": { color: colors.greenAccent[300] },
+          "& .MuiToggleButtonGroup-root .MuiToggleButton-root": {
+            borderColor: colors.grey[700],
+            "&.Mui-selected, &.Mui-selected:hover": {
+              color: colors.greenAccent[400],
+              backgroundColor: colors.blueAccent[700],
+              borderColor: colors.grey[500],
+            }
+          }
         }}
       >
         <DataGrid
@@ -181,7 +249,6 @@ const Logs = () => {
         />
       </Box>
 
-      {/* Finestra di Dialogo per la Cronologia */}
       <Dialog open={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} fullWidth maxWidth="lg">
         <DialogTitle sx={{ backgroundColor: colors.blueAccent[700] }}>
           History for Log ID: {selectedLogId}
@@ -203,17 +270,11 @@ const Logs = () => {
                 {historyData.map((record, index) => {
                   const prevRecord = historyData[index + 1]?.record;
                   const currentRecord = record.record;
-                  
                   const HighlightedCell = ({ value, prevValue }) => (
-                    <TableCell sx={{
-                      color: colors.grey[100],
-                      backgroundColor: prevValue && value !== prevValue ? colors.greenAccent[900] : 'transparent',
-                      fontWeight: prevValue && value !== prevValue ? 'bold' : 'normal',
-                    }}>
+                    <TableCell sx={{ color: colors.grey[100], backgroundColor: prevValue && value !== prevValue ? colors.greenAccent[900] : 'transparent', fontWeight: prevValue && value !== prevValue ? 'bold' : 'normal' }}>
                       {value}
                     </TableCell>
                   );
-
                   return (
                     <TableRow key={record.txId} sx={{ '&:hover': { backgroundColor: colors.primary[400] } }}>
                       <TableCell sx={{ color: colors.grey[100] }}>{new Date(record.timestamp).toLocaleString('it-IT')}</TableCell>

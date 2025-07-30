@@ -14,54 +14,21 @@ app.use(express.urlencoded({ extended: true }));
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// --- FUNZIONE DI SELEZIONE NODO CORRETTA E MIGLIORATA ---
+// --- Funzione di selezione del nodo ---
 function getFireflySDK(org) {
-  console.log(`\n--- [getFireflySDK] Ricevuto valore grezzo per org: '${org}' ---`);
   const normalizedOrg = (org || '').trim().toUpperCase();
-  console.log(`--- [getFireflySDK] Valore normalizzato: '${normalizedOrg}' ---`);
-  
   let host;
-  if (normalizedOrg === 'ORG1MSP') {
-    host = 'http://localhost:5000';
-  } else if (normalizedOrg === 'ORG2MSP') {
-    host = 'http://localhost:5001';
-  } else if (normalizedOrg === 'ORG3MSP') {
-    host = 'http://localhost:5002';
-  } else {
-    console.error(`!!! [getFireflySDK] ORG NON RICONOSCIUTA: '${org}'. Fallback al nodo di default (5000). !!!`);
+  if (normalizedOrg === 'ORG1MSP') host = 'http://localhost:5000';
+  else if (normalizedOrg === 'ORG2MSP') host = 'http://localhost:5001';
+  else if (normalizedOrg === 'ORG3MSP') host = 'http://localhost:5002';
+  else {
+    console.error(`!!! ORG NON RICONOSCIUTA: '${org}'. Fallback al nodo di default (5000). !!!`);
     host = 'http://localhost:5000';
   }
-  
-  console.log(`>>> [getFireflySDK] Connessione al nodo FireFly su host: ${host}`);
-  // Restituiamo sia l'istanza SDK che l'host usato, per un logging più facile
+  console.log(`>>> Connessione al nodo FireFly su host: ${host}`);
   return { ff: new FireFly({ host, namespace: 'default' }), host };
 }
 
-
-// --- Endpoint di Interazione con il Nodo FireFly ---
-
-app.get('/node/GetPrivateMessage', async (req, res) => {
-    console.log('\n--- Inizio richiesta a /node/GetPrivateMessage ---');
-    const org = req.headers['x-org'];
-    console.log(`Header 'x-org' ricevuto nel backend: '${org}'`);
-    
-    // De-strutturiamo l'oggetto restituito
-    const { ff, host } = getFireflySDK(org);
-    
-    try {
-        const messages = await ff.getMessages({ type: 'private' });
-        // Usiamo la variabile 'host' per confermare su quale nodo è stata fatta la query
-        console.log(`Trovati ${messages.length} messaggi privati per il nodo su ${host}`);
-        res.json(messages);
-    } catch (err) {
-        // --- CORREZIONE APPLICATA QUI ---
-        // Usiamo la variabile 'host' invece di ff.config.host
-        console.error(`Errore durante la query dei messaggi per il nodo su ${host}`, err.message);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Ho applicato la stessa correzione a tutti gli altri endpoint per coerenza
 
 // --- Endpoints per Invocare Transazioni Chaincode ---
 
@@ -160,29 +127,12 @@ app.post('/query/CountByAttackType', async (req, res) => {
 });
 
 app.post('/query/GetLogHistory', async (req, res) => {
-  console.log('\n--- Richiesta a /query/GetLogHistory ---');
   const org = req.headers['x-org'];
-  const { ff, host } = getFireflySDK(org);
-  
+  const { ff } = getFireflySDK(org);
   try {
-    console.log(`Recupero cronologia per l'ID ${req.body.id} dal nodo su ${host}`);
-
-    // --- CORREZIONE CHIAVE QUI ---
-    // Passiamo l'intero 'req.body' all'SDK, proprio come fa il curl e gli altri endpoint.
-    // L'SDK di FireFly sa come gestire 'input' o 'params' a seconda del tipo di chiamata.
-    // Il frontend invia { id: "..." }, FireFly lo formatterà correttamente per la query.
-    const result = await ff.queryContractAPI(
-        CHAINCODE_NAME, 
-        'GetLogHistory', 
-        { input: req.body } // Passiamo l'intero corpo della richiesta
-    );
-
-    console.log(`Cronologia per l'ID ${req.body.id} recuperata con successo.`);
+    const result = await ff.queryContractAPI(CHAINCODE_NAME, 'GetLogHistory', { input: req.body });
     res.json(result);
-  } catch (err) {
-    console.error(`Errore durante il recupero della cronologia per l'ID ${req.body.id}`, err.message);
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/query/TimeRange', async (req, res) => {
@@ -192,6 +142,46 @@ app.post('/query/TimeRange', async (req, res) => {
     const result = await ff.queryContractAPI(CHAINCODE_NAME, 'GetLogsByTimeRange', { input: req.body });
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- NUOVI ENDPOINT PER I FILTRI AVANZATI ---
+
+app.post('/query/GetLogsBySeverity', async (req, res) => {
+    console.log('\n--- Ricevuta richiesta a /query/GetLogsBySeverity ---');
+    const org = req.headers['x-org'];
+    const { ff } = getFireflySDK(org);
+    try {
+        console.log('Filtro per severity:', req.body);
+        const result = await ff.queryContractAPI(CHAINCODE_NAME, 'GetLogsBySeverity', { input: req.body });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/query/GetLogsWithAttachments', async (req, res) => {
+    console.log('\n--- Ricevuta richiesta a /query/GetLogsWithAttachments ---');
+    const org = req.headers['x-org'];
+    const { ff } = getFireflySDK(org);
+    try {
+        const result = await ff.queryContractAPI(CHAINCODE_NAME, 'GetLogsWithAttachments', { params: req.body });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/query/GetLogsBySubmitter', async (req, res) => {
+    console.log('\n--- Ricevuta richiesta a /query/GetLogsBySubmitter ---');
+    const org = req.headers['x-org'];
+    const { ff } = getFireflySDK(org);
+    try {
+        console.log('Filtro per submitter:', req.body);
+        const result = await ff.queryContractAPI(CHAINCODE_NAME, 'GetLogsBySubmitter', { input: req.body });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 
@@ -248,6 +238,14 @@ app.post('/node/PrivateMessage', async (req, res) => {
             group: { members: [{ identity: req.body.did }] }
         });
         res.json(privateResponse);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/node/GetPrivateMessage', async (req, res) => {
+    const { ff } = getFireflySDK(req.headers['x-org']);
+    try {
+        const messages = await ff.getMessages({ type: 'private' });
+        res.json(messages);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
