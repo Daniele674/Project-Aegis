@@ -160,12 +160,29 @@ app.post('/query/CountByAttackType', async (req, res) => {
 });
 
 app.post('/query/GetLogHistory', async (req, res) => {
+  console.log('\n--- Richiesta a /query/GetLogHistory ---');
   const org = req.headers['x-org'];
-  const { ff } = getFireflySDK(org);
+  const { ff, host } = getFireflySDK(org);
+  
   try {
-    const result = await ff.queryContractAPI(CHAINCODE_NAME, 'GetLogHistory', { params: req.body });
+    console.log(`Recupero cronologia per l'ID ${req.body.id} dal nodo su ${host}`);
+
+    // --- CORREZIONE CHIAVE QUI ---
+    // Passiamo l'intero 'req.body' all'SDK, proprio come fa il curl e gli altri endpoint.
+    // L'SDK di FireFly sa come gestire 'input' o 'params' a seconda del tipo di chiamata.
+    // Il frontend invia { id: "..." }, FireFly lo formatterà correttamente per la query.
+    const result = await ff.queryContractAPI(
+        CHAINCODE_NAME, 
+        'GetLogHistory', 
+        { input: req.body } // Passiamo l'intero corpo della richiesta
+    );
+
+    console.log(`Cronologia per l'ID ${req.body.id} recuperata con successo.`);
     res.json(result);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error(`Errore durante il recupero della cronologia per l'ID ${req.body.id}`, err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/query/TimeRange', async (req, res) => {
