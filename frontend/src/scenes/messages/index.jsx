@@ -1,4 +1,4 @@
-import { Box, useTheme } from "@mui/material";
+import { Box, useTheme, Typography } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { tokens } from "../../theme";
 import Header from "../../components/Header";
@@ -6,99 +6,126 @@ import axios from 'axios';
 import React, { useState, useEffect, useContext } from 'react';
 import { OrgContext } from "../../components/OrgContext";
 
+const CustomNoRowsOverlay = () => {
+    const theme = useTheme();
+    const colors = tokens(theme.palette.mode);
+    return (
+        <Box height="100%" display="flex" alignItems="center" justifyContent="center" sx={{ color: colors.grey[300] }}>
+            <Typography>Your inbox is empty.</Typography>
+        </Box>
+    );
+};
+
 const Messages = () => {
   const { org } = useContext(OrgContext);
   const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const theme = useTheme();
   const colors = tokens(theme.palette.mode);
 
   useEffect(() => {
+    // Flag per tracciare se il componente è ancora "attivo"
+    let isMounted = true; 
+
     const loadPrivateMsgs = async () => {
-      if (!org) return; // Non fare nulla se l'organizzazione non è ancora stata impostata
+      console.log(`--- [useEffect Messages] Esecuzione per org: '${org}' ---`);
+      if (!org) {
+          console.log("[useEffect Messages] Org non definito, esco.");
+          return;
+      }
+      setLoading(true);
 
       try {
+        console.log(`[useEffect Messages] Chiamata API con header x-org: '${org}'`);
+        
+        const statusRes = await axios.get('http://localhost:3001/node/Status', {
+            headers: { 'x-org': org }
+        });
+        const currentOrgDid = statusRes.data.org.did;
+
         const res = await axios.get('http://localhost:3001/node/GetPrivateMessage', {
           headers: { 'x-org': org }
         });
+        
+        // Interrompi se il componente non è più montato
+        if (!isMounted) return;
 
-        // Mappiamo ogni messaggio ricevuto per estrarre i dettagli
-        const messagePromises = res.data.map(async (item) => {
-          if (!item.data || !item.data[0] || !item.data[0].id) {
-            console.warn("Messaggio senza dati validi, lo salto:", item);
-            return null; // Salta i messaggi che non hanno un payload di dati
-          }
+        const receivedMessages = res.data.filter(item => item.header.author !== currentOrgDid);
 
+        const messagePromises = receivedMessages.map(async (item) => {
+          if (!item.data?.[0]?.id) return null;
+          
           const msgDataRes = await axios.get('http://localhost:3001/node/GetMsgData', {
             headers: { 'x-org': org },
             params: { 'id': item.data[0].id }
           });
           
-          // La nuova struttura del payload è { "message": "..." }
+          if (!isMounted) return null;
+
           const messageContent = msgDataRes.data.value?.message || "[No message content]";
 
           return {
             id: item.header.id,
-            author: item.header.author, // L'identità di chi ha inviato
-            timestamp: item.confirmed, // Il timestamp di conferma del messaggio
+            author: item.header.author,
+            timestamp: item.confirmed,
             tag: item.header.tag,
             topics: item.header.topics,
-            message: messageContent, // Il testo del messaggio
+            message: messageContent,
           };
         });
         
-        // Aspetta che tutte le richieste per i dati dei messaggi siano completate
-        const data = (await Promise.all(messagePromises)).filter(Boolean); // .filter(Boolean) rimuove eventuali null
-        console.log('Messaggi privati caricati:', data);
-        setRows(data);
+        const data = (await Promise.all(messagePromises)).filter(Boolean);
+        
+        // Aggiorna lo stato solo se questo è ancora l'effetto "attivo"
+        if (isMounted) {
+            console.log(`[useEffect Messages] Dati finali per '${org}':`, data.length, "messaggi.");
+            setRows(data);
+        }
       } catch (error) {
-        console.error("Errore nel caricamento dei messaggi privati:", error);
-        setRows([]); // In caso di errore, svuota la tabella
+        if (isMounted) {
+            console.error("Errore nel caricamento dei messaggi privati:", error);
+            setRows([]);
+        }
+      } finally {
+        if (isMounted) {
+            setLoading(false);
+        }
       }
     };
 
     loadPrivateMsgs();
-  }, [org]); // Riesegui quando cambia l'organizzazione
 
-  // Colonne aggiornate per mostrare i dati del messaggio semplice
+    // Funzione di cleanup: viene eseguita quando 'org' cambia, prima che parta il nuovo effetto.
+    return () => {
+      console.log(`--- [useEffect Messages] Cleanup per org: '${org}' ---`);
+      isMounted = false;
+    };
+  }, [org]);
+
   const columns = [
     { 
       field: "timestamp", 
-      headerName: "Timestamp", 
+      headerName: "Received", 
       flex: 1, 
       cellClassName: "name-column--cell",
-      type: "dateTime",
-      valueGetter: (value) => value ? new Date(value) : null
+      valueFormatter: (value) => value ? new Date(value).toLocaleString('it-IT') : ''
     },
     { 
       field: "author", 
-      headerName: "Author", 
+      headerName: "From", 
       flex: 1,
-      // Puoi aggiungere un valueGetter per formattare il DID se è troppo lungo
       valueGetter: (value) => value ? value.slice(value.lastIndexOf(':') + 1) : ''
     },
-    { 
-      field: "message", 
-      headerName: "Message", 
-      flex: 2, // Diamo più spazio al messaggio
-      cellClassName: "name-column--cell",
-    },
-    { 
-      field: "tag", 
-      headerName: "Tag", 
-      flex: 1 
-    },
-    { 
-      field: "topics", 
-      headerName: "Topics", 
-      flex: 1 
-    },
+    { field: "message", headerName: "Message", flex: 2, cellClassName: "name-column--cell" },
+    { field: "tag", headerName: "Tag", flex: 1 },
+    { field: "topics", headerName: "Topics", flex: 1 },
   ];
 
   return (
     <Box m="20px">
       <Header
         title="PRIVATE INBOX"
-        subtitle="List of Received Private Messages"
+        subtitle={`List of Messages Received by ${org}`}
       />
       <Box
         m="40px 0 0 0"
@@ -116,15 +143,18 @@ const Messages = () => {
             borderTop: "none",
             backgroundColor: colors.blueAccent[700],
           },
-          "& .MuiCheckbox-root": { color: `${colors.greenAccent[200]} !important` },
           "& .MuiDataGrid-toolbarContainer .MuiButton-text": { color: `${colors.grey[100]} !important` },
         }}
       >
         <DataGrid
           rows={rows}
           columns={columns}
-          slots={{ toolbar: GridToolbar }}
-          getRowId={(row) => row.id} // Specifica che il campo 'id' è l'ID univoco della riga
+          loading={loading}
+          slots={{ 
+            toolbar: GridToolbar,
+            noRowsOverlay: CustomNoRowsOverlay
+          }}
+          getRowId={(row) => row.id}
         />
       </Box>
     </Box>

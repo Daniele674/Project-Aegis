@@ -1,5 +1,5 @@
 import { Box, Button, TextField, Snackbar, useTheme, MenuItem } from "@mui/material";
-import { Formik, Field } from "formik";
+import { Formik } from "formik";
 import * as yup from "yup";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import Header from "../../components/Header";
@@ -16,7 +16,7 @@ const Form3 = () => {
   const colors = tokens(theme.palette.mode);
   const { org } = useContext(OrgContext);
   const [open, setOpen] = useState(false);
-  const [recipients, setRecipients] = useState([]); // Stato per memorizzare i destinatari
+  const [recipients, setRecipients] = useState([]);
 
   const [alertData, setAlertData] = useState({
     severity: 'success', title: 'Success', message: 'The message has been sent!'
@@ -26,24 +26,29 @@ const Form3 = () => {
   useEffect(() => {
     const getRecipientDids = async () => {
       try {
-        const orgsToFetch = ['MSP1', 'MSP2', 'MSP3'];
+        // --- CORREZIONE 1: Usa i nomi MSP ID completi e corretti ---
+        const orgsToFetch = ['Org1MSP', 'Org2MSP', 'Org3MSP'];
+        
         const didPromises = orgsToFetch.map(orgName =>
           axios.get('http://localhost:3001/node/Status', { headers: { 'x-org': orgName } })
         );
         const responses = await Promise.all(didPromises);
         
         const allRecipients = responses.map(res => ({
-            name: res.data.org.name, // es. "Org 1"
+            // FireFly restituisce l'MSP ID nel campo 'name' dello status
+            name: res.data.org.name, // es. "Org1MSP"
             did: res.data.org.did
         }));
 
-        // Filtra l'organizzazione corrente dalla lista dei destinatari
+        // --- CORREZIONE 2: Filtra l'organizzazione corrente usando l'MSP ID ---
+        // Ora il confronto 'Org1MSP' !== 'Org1MSP' funzionerà correttamente.
         const availableRecipients = allRecipients.filter(r => r.name !== org);
         setRecipients(availableRecipients);
+        console.log("Destinatari disponibili:", availableRecipients);
 
       } catch (error) {
         console.error("Failed to fetch recipient DIDs", error);
-        // Potresti voler mostrare un errore all'utente qui
+        setRecipients([]);
       }
     };
     getRecipientDids();
@@ -70,12 +75,11 @@ const Form3 = () => {
   };
 
   const handleFormSubmit = (values, { resetForm }) => {
-    // Il backend si aspetta un campo "log" per il messaggio, quindi lo chiamiamo così
     const payload = {
       did: values.did,
       tag: values.tag,
       topics: values.topics,
-      log: { message: values.message } // Struttura del messaggio semplice
+      log: { message: values.message }
     };
     sendPrivateMsg(payload);
     resetForm();
@@ -93,6 +97,7 @@ const Form3 = () => {
         onSubmit={handleFormSubmit}
         initialValues={initialValues}
         validationSchema={checkoutSchema}
+        enableReinitialize // Permette a Formik di resettare i valori se `initialValues` cambia
       >
         {({
           values,
@@ -111,7 +116,6 @@ const Form3 = () => {
                 "& > div": { gridColumn: isNonMobile ? undefined : "span 4" },
               }}
             >
-              {/* Campo di selezione del destinatario */}
               <TextField
                 select
                 fullWidth
@@ -127,13 +131,13 @@ const Form3 = () => {
               >
                 <MenuItem value=""><em>-- Select a recipient --</em></MenuItem>
                 {recipients.map(recipient => (
+                    // Mostriamo il nome (es. Org1MSP) ma usiamo il DID come valore
                     <MenuItem key={recipient.did} value={recipient.did}>
                         {recipient.name}
                     </MenuItem>
                 ))}
               </TextField>
               
-              {/* Campo del Messaggio */}
               <TextField
                 fullWidth
                 multiline
@@ -149,7 +153,6 @@ const Form3 = () => {
                 helperText={touched.message && errors.message}
                 sx={{ gridColumn: "span 4" }}
               />
-              {/* Campi Tag e Topics */}
               <TextField
                 fullWidth
                 variant="filled"
@@ -195,7 +198,6 @@ const Form3 = () => {
   );
 };
 
-// Schema di validazione aggiornato per il nuovo form
 const checkoutSchema = yup.object().shape({
   did: yup.string().required("A recipient is required"),
   message: yup.string().required("Message cannot be empty"),
@@ -207,7 +209,6 @@ const checkoutSchema = yup.object().shape({
   topics: yup.string().required("A topic is required"),
 });
 
-// Valori iniziali aggiornati
 const initialValues = {
   did: "",
   message: "",
