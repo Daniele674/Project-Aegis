@@ -87,9 +87,49 @@ app.post('/invoke/DeleteLog', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- NUOVO ENDPOINT PER AGGIUNGERE UN ALLEGATO ---
+app.post('/invoke/AddAttachmentToLog', upload.single('attachment'), async (req, res) => {
+    console.log('\n--- Ricevuta richiesta a /invoke/AddAttachmentToLog ---');
+    const org = req.headers['x-org'];
+    const { logId } = req.body;
+
+    if (!org || !logId || !req.file) {
+        return res.status(400).json({ error: 'Header x-org, logId, e un file allegato sono obbligatori.' });
+    }
+    const { ff } = getFireflySDK(org);
+
+    try {
+        // 1. Carica e pubblica il nuovo file allegato
+        console.log(`Caricamento del nuovo allegato '${req.file.originalname}'...`);
+        const uploadedData = await ff.uploadDataBlob(req.file.buffer, { filename: req.file.originalname });
+        const attachmentHash = uploadedData.id;
+        await ff.publishDataBlob(attachmentHash);
+        console.log(`Nuovo allegato pubblicato con ID: ${attachmentHash}`);
+
+        // 2. Prepara l'input e chiama il chaincode per associare l'hash al log
+        const input = { id: logId, attachmentHash };
+        const result = await ff.invokeContractAPI(CHAINCODE_NAME, 'AddAttachmentToLog', { input });
+
+        // 3. Invia una notifica broadcast dell'aggiornamento
+        await ff.sendBroadcast({
+            header: { tag: 'log_attachment_added' },
+            data: [
+                { value: { logId, newAttachmentId: attachmentHash } },
+                { id: attachmentHash }
+            ]
+        });
+
+        res.status(200).json(result);
+    } catch (err) {
+        const errorMessage = err.response?.data?.error || err.message || 'Errore sconosciuto.';
+        console.error("Errore in AddAttachmentToLog:", errorMessage);
+        res.status(500).json({ error: errorMessage });
+    }
+});
+
 
 // --- Endpoints per Query su Chaincode ---
-
+// ... (Tutti gli endpoint di query rimangono invariati)
 app.post('/query/GetAllLogs', async (req, res) => {
   const org = req.headers['x-org'];
   const { ff } = getFireflySDK(org);
@@ -144,49 +184,34 @@ app.post('/query/TimeRange', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- NUOVI ENDPOINT PER I FILTRI AVANZATI ---
-
 app.post('/query/GetLogsBySeverity', async (req, res) => {
-    console.log('\n--- Ricevuta richiesta a /query/GetLogsBySeverity ---');
     const org = req.headers['x-org'];
     const { ff } = getFireflySDK(org);
     try {
-        console.log('Filtro per severity:', req.body);
         const result = await ff.queryContractAPI(CHAINCODE_NAME, 'GetLogsBySeverity', { input: req.body });
         res.json(result);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/query/GetLogsWithAttachments', async (req, res) => {
-    console.log('\n--- Ricevuta richiesta a /query/GetLogsWithAttachments ---');
     const org = req.headers['x-org'];
     const { ff } = getFireflySDK(org);
     try {
         const result = await ff.queryContractAPI(CHAINCODE_NAME, 'GetLogsWithAttachments', { params: req.body });
         res.json(result);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/query/GetLogsBySubmitter', async (req, res) => {
-    console.log('\n--- Ricevuta richiesta a /query/GetLogsBySubmitter ---');
     const org = req.headers['x-org'];
     const { ff } = getFireflySDK(org);
     try {
-        console.log('Filtro per submitter:', req.body);
         const result = await ff.queryContractAPI(CHAINCODE_NAME, 'GetLogsBySubmitter', { input: req.body });
         res.json(result);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-
 // --- Endpoint per Download di Dati ---
-
 app.get('/data/download/:id', async (req, res) => {
     const org = req.headers['x-org'];
     const dataId = req.params.id;
@@ -205,7 +230,6 @@ app.get('/data/download/:id', async (req, res) => {
 
 
 // --- Endpoint di Interazione con il Nodo FireFly ---
-
 app.get('/node/Status', async (req, res) => {
     const org = req.headers['x-org'];
     const { ff } = getFireflySDK(org);
